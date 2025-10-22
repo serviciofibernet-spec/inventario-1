@@ -56,3 +56,11 @@ class Fusion(db.Model, TimestampMixin):
     elemento_destino_id = db.Column(db.Integer, nullable=False)
     fibra_origen = db.Column(db.Integer)
     fibra_destino = db.Column(db.Integer)
+
+
+class GeoFeature(db.Model, TimestampMixin):
+    __tablename__ = 'geo_features'
+    id = db.Column(db.Integer, primary_key=True)
+    tipo = db.Column(db.String(16), nullable=False)  # 'cable','manga','terminal','cabina'
+    geometry = db.Column(db.Text, nullable=False)     # GeoJSON geometry as string
+    properties = db.Column(db.JSON, default=dict)

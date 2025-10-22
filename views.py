@@ -1,6 +1,7 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from extensions import db
-from db_models import OLT, ODF, Cable, Manga, Splitter, Fusion
+from db_models import OLT, ODF, Cable, Manga, Splitter, Fusion, GeoFeature
+import json
 
 bp = Blueprint('main', __name__)
 
@@ -155,3 +156,54 @@ def create_fusion():
     return render_template('form_fusion.html',
                            olts=OLT.query.all(), odfs=ODF.query.all(), cables=Cable.query.all(),
                            mangas=Manga.query.all(), splitters=Splitter.query.all())
+
+
+@bp.get('/api/features')
+def api_list_features():
+    features = []
+    for f in GeoFeature.query.order_by(GeoFeature.id.asc()).all():
+        try:
+            geom = json.loads(f.geometry)
+        except Exception:
+            geom = None
+        features.append({
+            'type': 'Feature',
+            'id': f.id,
+            'geometry': geom,
+            'properties': {'tipo': f.tipo, **(f.properties or {})}
+        })
+    return jsonify({'type': 'FeatureCollection', 'features': features})
+
+
+@bp.post('/api/features')
+def api_create_feature():
+    data = request.get_json(silent=True) or {}
+    feature = data if data.get('type') == 'Feature' else None
+    if not feature:
+        return jsonify({'error': 'Invalid feature'}), 400
+    properties = feature.get('properties') or {}
+    tipo = properties.get('tipo')
+    geometry = feature.get('geometry')
+    if tipo not in {'cable', 'manga', 'terminal', 'cabina'}:
+        return jsonify({'error': 'Invalid tipo'}), 400
+    if not geometry:
+        return jsonify({'error': 'Missing geometry'}), 400
+    obj = GeoFeature(tipo=tipo, geometry=json.dumps(geometry), properties=properties)
+    db.session.add(obj)
+    db.session.commit()
+    return jsonify({'id': obj.id}), 201
+
+
+@bp.delete('/api/features/<int:feature_id>')
+def api_delete_feature(feature_id: int):
+    obj = GeoFeature.query.get_or_404(feature_id)
+    db.session.delete(obj)
+    db.session.commit()
+    return '', 204
+
+
+@bp.route('/mapa')
+def mapa():
+    # Centro: Santo Domingo, Cristo Rey (aprox 18.4889, -69.9336)
+    center = {'lat': 18.4889, 'lng': -69.9336, 'zoom': 15}
+    return render_template('mapa.html', center=center)

@@ -1,0 +1,138 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Mapa FTTH</h2>
+<div class="row">
+  <div class="col-md-9">
+    <div id="map" style="height: 75vh; border:1px solid #ddd;"></div>
+  </div>
+  <div class="col-md-3">
+    <div class="card mb-3">
+      <div class="card-header">Herramientas</div>
+      <div class="card-body">
+        <div class="mb-2">
+          <label class="form-label">Tipo de elemento</label>
+          <select id="feature-type" class="form-select">
+            <option value="cable">Cable (LineString)</option>
+            <option value="manga">Manga (Point)</option>
+            <option value="terminal">Terminal (Point)</option>
+            <option value="cabina">Cabina (Point)</option>
+          </select>
+        </div>
+        <button id="save-geometry" class="btn btn-primary w-100 mb-2">Guardar geometría</button>
+        <button id="reload" class="btn btn-outline-secondary w-100">Recargar</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">Leyenda</div>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item"><span style="display:inline-block;width:18px;height:0;border-top:3px solid #0d6efd;vertical-align:middle;margin-right:6px;"></span>Cable</li>
+        <li class="list-group-item"><img src="https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png" style="width:12px;margin-right:6px;"/>Manga</li>
+        <li class="list-group-item"><img src="https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png" style="width:12px;margin-right:6px;filter:hue-rotate(120deg);"/>Terminal</li>
+        <li class="list-group-item"><img src="https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png" style="width:12px;margin-right:6px;filter:hue-rotate(240deg);"/>Cabina</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script>
+(function(){
+  const center = {{ center|tojson }};
+  const map = L.map('map').setView([center.lat, center.lng], center.zoom);
+
+  // Gratis: OpenStreetMap
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  // Estilos por tipo
+  function styleFor(feature){
+    const tipo = feature.properties && feature.properties.tipo;
+    if(feature.geometry && feature.geometry.type === 'LineString' || tipo === 'cable'){
+      return {color:'#0d6efd', weight:3};
+    }
+    return {};
+  }
+
+  const drawnItems = new L.FeatureGroup();
+  map.addLayer(drawnItems);
+
+  const drawControl = new L.Control.Draw({
+    position: 'topleft',
+    draw: {
+      polyline: true,
+      polygon: false,
+      rectangle: false,
+      circle: false,
+      circlemarker: false,
+      marker: true
+    },
+    edit: { featureGroup: drawnItems, edit: true, remove: false }
+  });
+  map.addControl(drawControl);
+
+  // Cargar existentes
+  async function loadFeatures(){
+    const res = await fetch('/api/features');
+    const fc = await res.json();
+    L.geoJSON(fc, {
+      style: styleFor,
+      pointToLayer: function(feature, latlng){
+        const tipo = feature.properties && feature.properties.tipo;
+        let iconUrl = 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png';
+        let className = '';
+        if (tipo === 'terminal') className = 'terminal-icon';
+        if (tipo === 'cabina') className = 'cabina-icon';
+        const icon = new L.Icon.Default({ className });
+        return L.marker(latlng, { icon });
+      }
+    }).addTo(map);
+  }
+
+  loadFeatures();
+
+  document.getElementById('reload').addEventListener('click', ()=>{
+    location.reload();
+  });
+
+  let lastDrawn = null;
+  map.on(L.Draw.Event.CREATED, function (e) {
+    const layer = e.layer;
+    drawnItems.clearLayers();
+    drawnItems.addLayer(layer);
+    lastDrawn = layer;
+  });
+
+  async function saveGeometry(){
+    if(!lastDrawn){ alert('Dibuje un elemento primero'); return; }
+    const tipo = document.getElementById('feature-type').value;
+    let geojson = lastDrawn.toGeoJSON();
+    // normalizar types
+    if (geojson.geometry.type === 'Point' && tipo === 'cable'){
+      alert('Cable debe ser LineString'); return;
+    }
+    if (geojson.geometry.type === 'LineString' && tipo !== 'cable'){
+      alert('Solo cable es LineString'); return;
+    }
+    geojson.properties = Object.assign({}, geojson.properties || {}, { tipo });
+    const res = await fetch('/api/features', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(geojson)});
+    if(res.ok){
+      alert('Guardado');
+      location.reload();
+    } else {
+      const t = await res.text();
+      alert('Error: '+t);
+    }
+  }
+
+  document.getElementById('save-geometry').addEventListener('click', saveGeometry);
+})();
+</script>
+<style>
+.terminal-icon { filter: hue-rotate(120deg); }
+.cabina-icon { filter: hue-rotate(240deg); }
+</style>
+{% endblock %}

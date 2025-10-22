@@ -16,7 +16,12 @@
     {% for item in items %}
     <tr>
       <td>{{ item.id }}</td>
-      <td>{{ item.nombre }}</td>
+      <td>
+        {{ item.nombre }}
+        {% if entity == 'Manga' %}
+          <a class="ms-2 small" href="{{ url_for('main.manga_detail', manga_id=item.id) }}">ver</a>
+        {% endif %}
+      </td>
       <td>
         {% if entity == 'OLT' or entity == 'ODF' or entity == 'Manga' %}
           {{ item.ubicacion }}

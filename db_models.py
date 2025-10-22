@@ -29,6 +29,8 @@ class Cable(db.Model, TimestampMixin):
     from_ubicacion = db.Column(db.String(255), nullable=False)
     to_ubicacion = db.Column(db.String(255), nullable=False)
     fibras = db.Column(db.Integer, nullable=False)
+    # Optional association to a Manga (closure) for management context
+    manga_id = db.Column(db.Integer, db.ForeignKey('mangas.id'))
 
 
 class Manga(db.Model, TimestampMixin):
@@ -44,6 +46,7 @@ class Splitter(db.Model, TimestampMixin):
     nombre = db.Column(db.String(120), nullable=False)
     ratio = db.Column(db.String(16), nullable=False)
     ubicacion = db.Column(db.String(255), nullable=False)
+    manga_id = db.Column(db.Integer, db.ForeignKey('mangas.id'))
 
 
 class Fusion(db.Model, TimestampMixin):
@@ -64,3 +67,29 @@ class GeoFeature(db.Model, TimestampMixin):
     tipo = db.Column(db.String(16), nullable=False)  # 'cable','manga','terminal','cabina'
     geometry = db.Column(db.Text, nullable=False)     # GeoJSON geometry as string
     properties = db.Column(db.JSON, default=dict)
+
+    def cable_fiber_palette(self):
+        """Return list of fiber colors depending on count/buffers.
+        Spanish color order provided by user.
+        """
+        props = self.properties or {}
+        fibras = int(props.get('fibras') or 0)
+        # Base 12 sequence as requested
+        base12 = ['azul','naranja','verde','cafe','gris','blanco','rojo','negro','amarillo','violeta','rosa','aqua']
+        if fibras == 96:
+            buffer_colors = ['azul','naranja','verde','cafe','gris','blanco','rojo','negro']
+            buffers = []
+            for idx, bc in enumerate(buffer_colors):
+                buffers.append({
+                    'buffer': idx+1,
+                    'color': bc,
+                    'fibers': base12
+                })
+            return {'buffers': buffers}
+        elif fibras in (12, 24, 48):
+            repeat = fibras // 12
+            fibers = base12 * repeat
+            return {'fibers': fibers}
+        elif fibras in (4, 6):
+            return {'fibers': base12[:fibras]}
+        return {'fibers': []}

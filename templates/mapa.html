@@ -51,8 +51,9 @@
   // Estilos por tipo
   function styleFor(feature){
     const tipo = feature.properties && feature.properties.tipo;
-    if(feature.geometry && feature.geometry.type === 'LineString' || tipo === 'cable'){
-      return {color:'#0d6efd', weight:3};
+    if((feature.geometry && feature.geometry.type === 'LineString') || tipo === 'cable'){
+      // draw cable with gradient-like dashes to hint fibers
+      return {color:'#0d6efd', weight:4, dashArray:'6,6'};
     }
     return {};
   }
@@ -60,7 +61,7 @@
   const drawnItems = new L.FeatureGroup();
   map.addLayer(drawnItems);
 
-  const drawControl = new L.Control.Draw({
+  let drawControl = new L.Control.Draw({
     position: 'topleft',
     draw: {
       polyline: true,
@@ -78,18 +79,36 @@
   async function loadFeatures(){
     const res = await fetch('/api/features');
     const fc = await res.json();
-    L.geoJSON(fc, {
+    const layer = L.geoJSON(fc, {
       style: styleFor,
       pointToLayer: function(feature, latlng){
         const tipo = feature.properties && feature.properties.tipo;
-        let iconUrl = 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png';
-        let className = '';
-        if (tipo === 'terminal') className = 'terminal-icon';
-        if (tipo === 'cabina') className = 'cabina-icon';
-        const icon = new L.Icon.Default({ className });
-        return L.marker(latlng, { icon });
+        let iconUrl = 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png';
+        if (tipo === 'manga') iconUrl = 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png';
+        if (tipo === 'terminal') iconUrl = 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png';
+        if (tipo === 'cabina') iconUrl = 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-violet.png';
+        const icon = new L.Icon({
+          iconUrl,
+          shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+          iconSize: [25, 41],
+          iconAnchor: [12, 41],
+          popupAnchor: [1, -34],
+          shadowSize: [41, 41]
+        });
+        const marker = L.marker(latlng, { icon });
+        if (tipo === 'manga'){
+          marker.bindPopup('<b>Manga</b><br/><a href="/mangas">Ir a listado</a>');
+        }
+        return marker;
       }
     }).addTo(map);
+    layer.eachLayer(function(l){
+      const f = l.feature || {};
+      const p = f.properties || {};
+      if (p.tipo === 'cable'){
+        l.bindTooltip((p.nombre || 'Cable') + (p.fibras? (' · '+p.fibras+' hilos') : ''), {sticky:true});
+      }
+    });
   }
 
   loadFeatures();
@@ -99,12 +118,28 @@
   });
 
   let lastDrawn = null;
+  let lastDrawnType = null;
   map.on(L.Draw.Event.CREATED, function (e) {
     const layer = e.layer;
     drawnItems.clearLayers();
     drawnItems.addLayer(layer);
     lastDrawn = layer;
+    lastDrawnType = e.layerType; // polyline or marker
   });
+
+  // Modal to collect cable meta
+  function openCableModal(defaultName){
+    const name = prompt('Nombre del cable:', defaultName || 'Cable');
+    if(!name) return null;
+    let fibras = prompt('Numero de hilos (4,6,12,24,48,96):', '12');
+    if(!fibras) return null;
+    fibras = parseInt(fibras, 10);
+    if(![4,6,12,24,48,96].includes(fibras)){
+      alert('Cantidad invalida');
+      return null;
+    }
+    return { nombre: name, fibras };
+  }
 
   async function saveGeometry(){
     if(!lastDrawn){ alert('Dibuje un elemento primero'); return; }
@@ -117,7 +152,36 @@
     if (geojson.geometry.type === 'LineString' && tipo !== 'cable'){
       alert('Solo cable es LineString'); return;
     }
-    geojson.properties = Object.assign({}, geojson.properties || {}, { tipo });
+    // enrich properties: for cable ask name and fibers
+    let props = Object.assign({}, geojson.properties || {}, { tipo });
+    if (tipo === 'cable'){
+      const meta = openCableModal();
+      if(!meta) return;
+      props.nombre = meta.nombre;
+      props.fibras = meta.fibras;
+      // Precompute buffer/fiber colors for 96 fibers
+      const base12 = ['azul','naranja','verde','cafe','gris','blanco','rojo','negro','amarillo','violeta','rosa','aqua'];
+      // Note: 'violeta' used for 10th as standard; can adjust per requirement
+      if (meta.fibras === 96){
+        const buffers = [];
+        const bufferColors = ['azul','naranja','verde','cafe','gris','blanco','rojo','negro'];
+        for(let b=0; b<8; b++){
+          const fibers = [];
+          for(let i=0;i<12;i++) fibers.push(base12[i]);
+          buffers.push({ buffer: b+1, color: bufferColors[b], fibers });
+        }
+        props.buffers = buffers;
+      } else if ([12,24,48].includes(meta.fibras)){
+        props.fiber_colors = [];
+        const repeat = meta.fibras/12;
+        const base12 = ['azul','naranja','verde','cafe','gris','blanco','rojo','negro','amarillo','violeta','rosa','aqua'];
+        for(let r=0;r<repeat;r++) props.fiber_colors = props.fiber_colors.concat(base12);
+      } else if ([4,6].includes(meta.fibras)){
+        const base = ['azul','naranja','verde','cafe','gris','blanco'];
+        props.fiber_colors = base.slice(0, meta.fibras);
+      }
+    }
+    geojson.properties = props;
     const res = await fetch('/api/features', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(geojson)});
     if(res.ok){
       alert('Guardado');

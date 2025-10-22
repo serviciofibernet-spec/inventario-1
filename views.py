@@ -96,6 +96,40 @@ def create_manga():
     return render_template('form_manga.html')
 
 
+@bp.route('/mangas/<int:manga_id>')
+def manga_detail(manga_id: int):
+    manga = Manga.query.get_or_404(manga_id)
+    cables = Cable.query.filter_by(manga_id=manga.id).order_by(Cable.id.desc()).all()
+    splitters = Splitter.query.filter_by(manga_id=manga.id).order_by(Splitter.id.desc()).all()
+    # Geo features near this manga (simple: same id in properties if set)
+    features = GeoFeature.query.filter(GeoFeature.properties['manga_id'].as_integer() == manga.id).all() if hasattr(GeoFeature.properties, 'as_integer') else []
+    return render_template('manga_detail.html', manga=manga, cables=cables, splitters=splitters, features=features)
+
+
+@bp.route('/mangas/<int:manga_id>/add_cable', methods=['POST'])
+def manga_add_cable(manga_id: int):
+    manga = Manga.query.get_or_404(manga_id)
+    nombre = request.form.get('nombre','').strip() or f"Cable M{manga.id}"
+    fibras = int(request.form.get('fibras','12'))
+    cable = Cable(nombre=nombre, from_ubicacion=manga.ubicacion, to_ubicacion=manga.ubicacion, fibras=fibras, manga_id=manga.id)
+    db.session.add(cable)
+    db.session.commit()
+    flash('Cable agregado a la manga','success')
+    return redirect(url_for('main.manga_detail', manga_id=manga.id))
+
+
+@bp.route('/mangas/<int:manga_id>/add_splitter', methods=['POST'])
+def manga_add_splitter(manga_id: int):
+    manga = Manga.query.get_or_404(manga_id)
+    nombre = request.form.get('nombre','').strip() or f"SPL M{manga.id}"
+    ratio = request.form.get('ratio','1:8').strip()
+    splitter = Splitter(nombre=nombre, ratio=ratio, ubicacion=manga.ubicacion, manga_id=manga.id)
+    db.session.add(splitter)
+    db.session.commit()
+    flash('Splitter agregado a la manga','success')
+    return redirect(url_for('main.manga_detail', manga_id=manga.id))
+
+
 @bp.route('/splitters')
 def list_splitters():
     items = Splitter.query.order_by(Splitter.id.desc()).all()
@@ -188,8 +222,14 @@ def api_create_feature():
         return jsonify({'error': 'Invalid tipo'}), 400
     if not geometry:
         return jsonify({'error': 'Missing geometry'}), 400
+    # Persist also to Cable table when tipo=cable for relational management
     obj = GeoFeature(tipo=tipo, geometry=json.dumps(geometry), properties=properties)
     db.session.add(obj)
+    if tipo == 'cable':
+        nombre = properties.get('nombre') or 'Cable'
+        fibras = int(properties.get('fibras') or 12)
+        # For now, from/to ubicacion unknown when drawn on map
+        db.session.add(Cable(nombre=nombre, from_ubicacion='MAP', to_ubicacion='MAP', fibras=fibras))
     db.session.commit()
     return jsonify({'id': obj.id}), 201
 

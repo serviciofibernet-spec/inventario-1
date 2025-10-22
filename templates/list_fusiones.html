@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="m-0">Fusiones</h2>
+  <a class="btn btn-primary" href="{{ url_for('main.create_fusion') }}">Nueva Fusión</a>
+</div>
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Descripción</th>
+      <th>Origen</th>
+      <th>Destino</th>
+      <th>Fibras</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for f in items %}
+    <tr>
+      <td>{{ f.id }}</td>
+      <td>{{ f.descripcion }}</td>
+      <td>{{ f.elemento_origen_tipo }} #{{ f.elemento_origen_id }}</td>
+      <td>{{ f.elemento_destino_tipo }} #{{ f.elemento_destino_id }}</td>
+      <td>
+        {% if f.fibra_origen %}{{ f.fibra_origen }}{% endif %}
+        →
+        {% if f.fibra_destino %}{{ f.fibra_destino }}{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

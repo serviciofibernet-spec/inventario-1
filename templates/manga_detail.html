@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Manga: {{ manga.nombre }}</h2>
+<p class="text-muted">Ubicacion: {{ manga.ubicacion }}</p>
+<div class="row">
+  <div class="col-md-6">
+    <div class="card mb-3">
+      <div class="card-header">Cables en esta manga</div>
+      <div class="card-body">
+        <form class="row g-2" method="post" action="{{ url_for('main.manga_add_cable', manga_id=manga.id) }}">
+          <div class="col-md-6"><input name="nombre" class="form-control" placeholder="Nombre del cable"></div>
+          <div class="col-md-3">
+            <select name="fibras" class="form-select">
+              <option>4</option>
+              <option>6</option>
+              <option selected>12</option>
+              <option>24</option>
+              <option>48</option>
+              <option>96</option>
+            </select>
+          </div>
+          <div class="col-md-3"><button class="btn btn-primary w-100">Agregar</button></div>
+        </form>
+        <table class="table table-sm mt-3">
+          <thead><tr><th>ID</th><th>Nombre</th><th>Fibras</th></tr></thead>
+          <tbody>
+          {% for c in cables %}
+            <tr><td>{{ c.id }}</td><td>{{ c.nombre }}</td><td>{{ c.fibras }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card mb-3">
+      <div class="card-header">Splitters</div>
+      <div class="card-body">
+        <form class="row g-2" method="post" action="{{ url_for('main.manga_add_splitter', manga_id=manga.id) }}">
+          <div class="col-md-6"><input name="nombre" class="form-control" placeholder="Nombre"></div>
+          <div class="col-md-4"><input name="ratio" class="form-control" value="1:8"></div>
+          <div class="col-md-2"><button class="btn btn-primary w-100">Agregar</button></div>
+        </form>
+        <table class="table table-sm mt-3">
+          <thead><tr><th>ID</th><th>Nombre</th><th>Ratio</th></tr></thead>
+          <tbody>
+          {% for s in splitters %}
+            <tr><td>{{ s.id }}</td><td>{{ s.nombre }}</td><td>{{ s.ratio }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

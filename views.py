@@ -1,0 +1,249 @@
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from extensions import db
+from db_models import OLT, ODF, Cable, Manga, Splitter, Fusion, GeoFeature
+import json
+
+bp = Blueprint('main', __name__)
+
+
+@bp.route('/olts')
+def list_olts():
+    items = OLT.query.order_by(OLT.id.desc()).all()
+    return render_template('list.html', title='OLTs', endpoint='create_olt', items=items, entity='OLT')
+
+
+@bp.route('/olts/create', methods=['GET', 'POST'])
+def create_olt():
+    if request.method == 'POST':
+        nombre = request.form.get('nombre', '').strip()
+        ubicacion = request.form.get('ubicacion', '').strip()
+        if not nombre or not ubicacion:
+            flash('Nombre y ubicación son obligatorios', 'danger')
+        else:
+            db.session.add(OLT(nombre=nombre, ubicacion=ubicacion))
+            db.session.commit()
+            flash('OLT creada', 'success')
+            return redirect(url_for('main.list_olts'))
+    return render_template('form_olt.html')
+
+
+@bp.route('/odfs')
+def list_odfs():
+    items = ODF.query.order_by(ODF.id.desc()).all()
+    return render_template('list.html', title='ODFs', endpoint='create_odf', items=items, entity='ODF')
+
+
+@bp.route('/odfs/create', methods=['GET', 'POST'])
+def create_odf():
+    if request.method == 'POST':
+        nombre = request.form.get('nombre', '').strip()
+        ubicacion = request.form.get('ubicacion', '').strip()
+        if not nombre or not ubicacion:
+            flash('Nombre y ubicación son obligatorios', 'danger')
+        else:
+            db.session.add(ODF(nombre=nombre, ubicacion=ubicacion))
+            db.session.commit()
+            flash('ODF creada', 'success')
+            return redirect(url_for('main.list_odfs'))
+    return render_template('form_odf.html')
+
+
+@bp.route('/cables')
+def list_cables():
+    items = Cable.query.order_by(Cable.id.desc()).all()
+    return render_template('list.html', title='Cables', endpoint='create_cable', items=items, entity='Cable')
+
+
+@bp.route('/cables/create', methods=['GET', 'POST'])
+def create_cable():
+    if request.method == 'POST':
+        nombre = request.form.get('nombre', '').strip()
+        from_ubicacion = request.form.get('from_ubicacion', '').strip()
+        to_ubicacion = request.form.get('to_ubicacion', '').strip()
+        fibras = request.form.get('fibras', '0').strip()
+        try:
+            fibras = int(fibras)
+        except ValueError:
+            fibras = 0
+        if not nombre or not from_ubicacion or not to_ubicacion or fibras <= 0:
+            flash('Todos los campos son obligatorios y fibras > 0', 'danger')
+        else:
+            db.session.add(Cable(nombre=nombre, from_ubicacion=from_ubicacion, to_ubicacion=to_ubicacion, fibras=fibras))
+            db.session.commit()
+            flash('Cable creado', 'success')
+            return redirect(url_for('main.list_cables'))
+    return render_template('form_cable.html')
+
+
+@bp.route('/mangas')
+def list_mangas():
+    items = Manga.query.order_by(Manga.id.desc()).all()
+    return render_template('list.html', title='Mangas', endpoint='create_manga', items=items, entity='Manga')
+
+
+@bp.route('/mangas/create', methods=['GET', 'POST'])
+def create_manga():
+    if request.method == 'POST':
+        nombre = request.form.get('nombre', '').strip()
+        ubicacion = request.form.get('ubicacion', '').strip()
+        if not nombre or not ubicacion:
+            flash('Nombre y ubicación son obligatorios', 'danger')
+        else:
+            db.session.add(Manga(nombre=nombre, ubicacion=ubicacion))
+            db.session.commit()
+            flash('Manga creada', 'success')
+            return redirect(url_for('main.list_mangas'))
+    return render_template('form_manga.html')
+
+
+@bp.route('/mangas/<int:manga_id>')
+def manga_detail(manga_id: int):
+    manga = Manga.query.get_or_404(manga_id)
+    cables = Cable.query.filter_by(manga_id=manga.id).order_by(Cable.id.desc()).all()
+    splitters = Splitter.query.filter_by(manga_id=manga.id).order_by(Splitter.id.desc()).all()
+    # Geo features near this manga (simple: same id in properties if set)
+    features = GeoFeature.query.filter(GeoFeature.properties['manga_id'].as_integer() == manga.id).all() if hasattr(GeoFeature.properties, 'as_integer') else []
+    return render_template('manga_detail.html', manga=manga, cables=cables, splitters=splitters, features=features)
+
+
+@bp.route('/mangas/<int:manga_id>/add_cable', methods=['POST'])
+def manga_add_cable(manga_id: int):
+    manga = Manga.query.get_or_404(manga_id)
+    nombre = request.form.get('nombre','').strip() or f"Cable M{manga.id}"
+    fibras = int(request.form.get('fibras','12'))
+    cable = Cable(nombre=nombre, from_ubicacion=manga.ubicacion, to_ubicacion=manga.ubicacion, fibras=fibras, manga_id=manga.id)
+    db.session.add(cable)
+    db.session.commit()
+    flash('Cable agregado a la manga','success')
+    return redirect(url_for('main.manga_detail', manga_id=manga.id))
+
+
+@bp.route('/mangas/<int:manga_id>/add_splitter', methods=['POST'])
+def manga_add_splitter(manga_id: int):
+    manga = Manga.query.get_or_404(manga_id)
+    nombre = request.form.get('nombre','').strip() or f"SPL M{manga.id}"
+    ratio = request.form.get('ratio','1:8').strip()
+    splitter = Splitter(nombre=nombre, ratio=ratio, ubicacion=manga.ubicacion, manga_id=manga.id)
+    db.session.add(splitter)
+    db.session.commit()
+    flash('Splitter agregado a la manga','success')
+    return redirect(url_for('main.manga_detail', manga_id=manga.id))
+
+
+@bp.route('/splitters')
+def list_splitters():
+    items = Splitter.query.order_by(Splitter.id.desc()).all()
+    return render_template('list.html', title='Splitters', endpoint='create_splitter', items=items, entity='Splitter')
+
+
+@bp.route('/splitters/create', methods=['GET', 'POST'])
+def create_splitter():
+    if request.method == 'POST':
+        nombre = request.form.get('nombre', '').strip()
+        ratio = request.form.get('ratio', '').strip()
+        ubicacion = request.form.get('ubicacion', '').strip()
+        if not nombre or not ratio or not ubicacion:
+            flash('Todos los campos son obligatorios', 'danger')
+        else:
+            db.session.add(Splitter(nombre=nombre, ratio=ratio, ubicacion=ubicacion))
+            db.session.commit()
+            flash('Splitter creado', 'success')
+            return redirect(url_for('main.list_splitters'))
+    return render_template('form_splitter.html')
+
+
+@bp.route('/fusiones')
+def list_fusiones():
+    items = Fusion.query.order_by(Fusion.id.desc()).all()
+    return render_template('list_fusiones.html', items=items)
+
+
+@bp.route('/fusiones/create', methods=['GET', 'POST'])
+def create_fusion():
+    if request.method == 'POST':
+        descripcion = request.form.get('descripcion', '').strip()
+        origen_tipo = request.form.get('elemento_origen_tipo', '').strip()
+        origen_id = int(request.form.get('elemento_origen_id', '0'))
+        destino_tipo = request.form.get('elemento_destino_tipo', '').strip()
+        destino_id = int(request.form.get('elemento_destino_id', '0'))
+        fibra_origen = request.form.get('fibra_origen')
+        fibra_destino = request.form.get('fibra_destino')
+        fibra_origen = int(fibra_origen) if fibra_origen else None
+        fibra_destino = int(fibra_destino) if fibra_destino else None
+
+        if not descripcion or not origen_tipo or not destino_tipo or origen_id <= 0 or destino_id <= 0:
+            flash('Complete todos los campos requeridos', 'danger')
+        else:
+            db.session.add(Fusion(
+                descripcion=descripcion,
+                elemento_origen_tipo=origen_tipo,
+                elemento_origen_id=origen_id,
+                elemento_destino_tipo=destino_tipo,
+                elemento_destino_id=destino_id,
+                fibra_origen=fibra_origen,
+                fibra_destino=fibra_destino,
+            ))
+            db.session.commit()
+            flash('Fusión creada', 'success')
+            return redirect(url_for('main.list_fusiones'))
+
+    return render_template('form_fusion.html',
+                           olts=OLT.query.all(), odfs=ODF.query.all(), cables=Cable.query.all(),
+                           mangas=Manga.query.all(), splitters=Splitter.query.all())
+
+
+@bp.get('/api/features')
+def api_list_features():
+    features = []
+    for f in GeoFeature.query.order_by(GeoFeature.id.asc()).all():
+        try:
+            geom = json.loads(f.geometry)
+        except Exception:
+            geom = None
+        features.append({
+            'type': 'Feature',
+            'id': f.id,
+            'geometry': geom,
+            'properties': {'tipo': f.tipo, **(f.properties or {})}
+        })
+    return jsonify({'type': 'FeatureCollection', 'features': features})
+
+
+@bp.post('/api/features')
+def api_create_feature():
+    data = request.get_json(silent=True) or {}
+    feature = data if data.get('type') == 'Feature' else None
+    if not feature:
+        return jsonify({'error': 'Invalid feature'}), 400
+    properties = feature.get('properties') or {}
+    tipo = properties.get('tipo')
+    geometry = feature.get('geometry')
+    if tipo not in {'cable', 'manga', 'terminal', 'cabina'}:
+        return jsonify({'error': 'Invalid tipo'}), 400
+    if not geometry:
+        return jsonify({'error': 'Missing geometry'}), 400
+    # Persist also to Cable table when tipo=cable for relational management
+    obj = GeoFeature(tipo=tipo, geometry=json.dumps(geometry), properties=properties)
+    db.session.add(obj)
+    if tipo == 'cable':
+        nombre = properties.get('nombre') or 'Cable'
+        fibras = int(properties.get('fibras') or 12)
+        # For now, from/to ubicacion unknown when drawn on map
+        db.session.add(Cable(nombre=nombre, from_ubicacion='MAP', to_ubicacion='MAP', fibras=fibras))
+    db.session.commit()
+    return jsonify({'id': obj.id}), 201
+
+
+@bp.delete('/api/features/<int:feature_id>')
+def api_delete_feature(feature_id: int):
+    obj = GeoFeature.query.get_or_404(feature_id)
+    db.session.delete(obj)
+    db.session.commit()
+    return '', 204
+
+
+@bp.route('/mapa')
+def mapa():
+    # Centro: Santo Domingo, Cristo Rey (aprox 18.4889, -69.9336)
+    center = {'lat': 18.4889, 'lng': -69.9336, 'zoom': 15}
+    return render_template('mapa.html', center=center)

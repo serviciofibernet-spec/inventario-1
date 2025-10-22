@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="m-0">{{ title }}</h2>
+  <a class="btn btn-primary" href="{{ url_for('main.' + endpoint) }}">Nuevo {{ entity }}</a>
+</div>
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Nombre</th>
+      <th>Ubicación/Info</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in items %}
+    <tr>
+      <td>{{ item.id }}</td>
+      <td>
+        {{ item.nombre }}
+        {% if entity == 'Manga' %}
+          <a class="ms-2 small" href="{{ url_for('main.manga_detail', manga_id=item.id) }}">ver</a>
+        {% endif %}
+      </td>
+      <td>
+        {% if entity == 'OLT' or entity == 'ODF' or entity == 'Manga' %}
+          {{ item.ubicacion }}
+        {% elif entity == 'Cable' %}
+          {{ item.from_ubicacion }} → {{ item.to_ubicacion }} ({{ item.fibras }} fibras)
+        {% elif entity == 'Splitter' %}
+          {{ item.ratio }} @ {{ item.ubicacion }}
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

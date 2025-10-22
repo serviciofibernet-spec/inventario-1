@@ -1,11 +1,12 @@
 @echo off
 setlocal
 
-REM Windows installer for FTTH panel (ASCII-safe)
+REM Simple Windows installer for FTTH panel (ASCII-safe)
 
 cd /d "%~dp0"
 
 set "PYCMD="
+
 where py >nul 2>nul
 if %errorlevel% EQU 0 (
   set "PYCMD=py -3"
@@ -31,8 +32,6 @@ if not exist ".venv" (
     pause
     exit /b 1
   )
-) else (
-  echo Using existing .venv
 )
 
 echo Upgrading pip ...
